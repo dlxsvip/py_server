@@ -1,0 +1,134 @@
+* {
+    margin: 0;
+    padding: 0;
+    list-style-type: none;
+}
+
+body {
+    font: 12px/180% Arial, Lucida, Verdana, "宋体", Helvetica, sans-serif;
+    color: #333;
+    background: #fff;
+}
+
+/* 文件资源 */
+.shortcut {
+    height: 32px;
+    line-height: 32px;
+    font-size: 12px;
+    background: #eee;
+    text-transform: uppercase;
+    box-shadow: 1px 0px 2px rgba(0, 0, 0, 0.2);
+    border-bottom: 1px solid #DDDDDD;
+
+}
+
+.shortcut h1 {
+    padding: 0px 10px;
+    letter-spacing: 1px;
+    color: #333;
+    text-shadow: 0px 1px 1px #fff;
+    display: block;
+    text-align: center;
+    height: 32px;
+    overflow: hidden;
+    font-size: 14px;
+    font-family: "微软雅黑", "宋体";
+}
+
+.div_file {
+    height: 32px;
+    line-height: 32px;
+    font-size: 12px;
+    background: #eee;
+    text-transform: uppercase;
+    box-shadow: 0px 2px 3px rgba(0, 0, 0, 0.2);
+    border-bottom: 1px solid #DDDDDD;
+    margin-top: 5px;
+}
+
+.srcfile div {
+    height: 32px;
+    line-height: 32px;
+    font-size: 12px;
+    /* background: #eee; */
+    text-transform: uppercase;
+    /* box-shadow: 0px 2px 3px rgba(0, 0, 0, 0.2); */
+    border-bottom: 1px solid #eee;
+    margin-top: 5px;
+}
+
+
+/*图片预览窗口*/
+.img-pre {
+    z-index: 9999;
+    /*窗口的位置*/
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    width: 660px;
+    height: 360px;
+    margin: -180px 0 0 -330px;
+    border-radius: 5px;
+    border: solid 2px #666;
+    background-color: #fff;
+    display: none;/*开始时窗口不可见*/
+    box-shadow: 0 0 10px #666;
+}
+
+/*文本预览窗口*/
+.txt-pre {
+    z-index: 9999;
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    width: 660px;
+    height: 360px;
+    margin: -180px 0 0 -330px;
+    border-radius: 5px;
+    border: solid 2px #666;
+    background-color: #fff;
+    display: none;
+    box-shadow: 0 0 10px #666;
+}
+
+.txt-pre-title {
+    border-bottom: 1px solid #ddd;
+    padding: 12px;
+    position: relative;
+}
+
+.txt-pre-title .close {
+    float: right;
+    color: #999;
+    padding: 5px;
+    margin: -2px -5px -5px;
+    font: bold 14px/14px simsun;
+    text-shadow: 0 1px 0 #ddd
+}
+
+.txt-pre-area {
+    padding: 6px;
+}
+
+/*遮罩*/
+#zhe-zhao {
+    z-index: 9998;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: #000;
+    opacity: 0.4;
+    filter: alpha(opacity=40);
+    display: none
+}
+
+/*控制关闭按钮的位置*/
+#close {
+    margin-left: 188px;
+    /*当鼠标移动到X上时，出现小手的效果*/
+    cursor: pointer;
+}
+
+

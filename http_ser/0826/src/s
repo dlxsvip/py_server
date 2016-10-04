@@ -1,0 +1,803 @@
+
+解析测试流程
+
+# 从执行Python脚本 run_test 开始
+$python ./bin/run_test --config=./config/slb_et2sqa_10gtest_a.json --master_sls=./cluster10gtesta.sls ./test_cases/slb_api/end_to_end
+$python ./bin/run_test --config=./config/slb_et2sqa_10gtest_b.json --master_sls=../cluster10gtestb.sls test_cases/slb_api/end_to_end/test_ccv_5_http_rs_pool.py
+
+第一个参数 slb_et2sqa_10gtest_b.json
+
+	里面有可使用的虚机信息,"USER_BID":slbapi用来选择master,"USER_IDKP":用户ID, SLBAPI_*:slbapi主机、数据库等信息, SLBCS_*:master主机、数据库等信息
+
+第二个参数 ./cluster10gtestb.sls
+
+	里面有接口的主机地址、端口、URL，用户信息等
+
+第三个参数 ./test_cases/slb_api/end_to_end
+
+	pytest要跑的测试例所在的文件夹
+
+--- 主脚本  run_test -----------------------------------------------------------------------
+def main():
+	parser, opts, args = parse_options()
+	opts = {
+			  config:./config/slb_et2sqa_10gtest_b.json,
+			  master_sls:../cluster10gtestb.sls
+			}
+	# 导入 env
+	from alitest import env, config_adapter
+	# 用 yaml 格式加载 “../cluster10gtestb.sls”，并把此文件里的键申明为全局变量
+    env.load(opts.master_sls,'yaml')
+	# 申明 options 属性
+    env.options = {}
+
+	# 把“./config/slb_et2sqa_10gtest_b.json”里的值 赋给env.options
+	if opts.config:
+        env.options['config'] = opts.config
+
+---- 每个具体待测的脚本----------------------------------------------------------------------------------------
+例：当脚本test_ccv_5_http_rs_pool.py
+在 import slbqat 的时候
+slbqat脚本开始运行
+if 'config' in env.options:
+	# 读取 “./config/slb_et2sqa_10gtest_b.json”
+    conf_file = os.path.abspath(env.options.get('config'))
+    file_object = open(conf_file, 'r')
+    CONFIG = json.load(file_object)
+	# 封装 变量到 slbqat.ENV
+    ENV = CONFIG.get('environment',{})
+    SYS = CONFIG.get('system',{})
+    IDKP = ENV['USER_IDKP']
+
+
+创建 lb
+# 从slbqat.ENV['USER_IDKP'] (slb_et2sqa_10gtest_b.json)里获得 idkp = '166'
+# 从env.slbapi_info.get('vip') (cluster10gtestb.sls)   得到测试环境要访问的slbapi地址 slbapi_info-->vip-->10.101.169.68:81
+# 或者从测试的debug.log获取
+host_addr = env.options.get('srv_addr', env.slbapi_info.get('vip'))
+
+
+
+
+
+由于测试机调用 slbapi的地址 没有传bid，导致 slbapi后台在选择master的时候 是根据slbapi数据库region_info表里，
+所有符合region_no列表里，选择lb数量最少的master地址（根据 lb_count/weight 获取值最小的）。当此master里的lb 不是最少时，返回别的master地址（）
+
+bid 用来选择 master，所有的master 共用一个数据库，在master数据库loadbalancer表里 bid用来区分是哪个master创建的实例
+
+-----------------170.2测试环境创建自己的目录-------------------------------------------
+#星号表示当前所有文件夹）可以查看当前目录下各个文件夹的大小
+>du -sh  *
+
+>sudo su
+>mkdir yyl
+>cd yyl
+>mkdir slbauto_a
+>chmod 775 -R yyl  #可以SFTP上传文件
+>cp -r /home/admin/gyx/wq_slbauto/test_cases ./slbauto_a
+>cp -r /home/admin/gyx/wq_slbauto/alitest ./slbauto_a
+>cp -r /home/admin/gyx/wq_slbauto/bin ./slbauto_a
+>cp -r /home/admin/gyx/wq_slbauto/lib ./slbauto_a
+>cp -r /home/admin/gyx/wq_slbauto/slbqat ./slbauto_a
+>cp -r /home/admin/gyx/wq_slbauto/config ./slbauto_a
+>cp  /home/admin/gyx/cluster10gtesta.sls ./slbauto_a
+
+>cd slbauto_a
+# 执行测试命令
+python ./bin/run_test --config=./config/slb_et2sqa_10gtest_a.json --master_sls=./cluster10gtesta.sls ./test_cases/slb_api/end_to_end
+# 或指定具体文件
+python ./bin/run_test --config=./config/slb_et2sqa_10gtest_a.json --master_sls=./cluster10gtesta.sls ./test_cases/slb_api/end_to_end/test_e2e_backup.py
+
+-----------------------------------执行打RPM包-------------------------------------------
+
+>cd /home/shumeng/yyl/slbauto_b/wq_slbauto/rpm
+>t-abs ali-slb-auto.spec
+
+ali-slb-auto-cases-3.4.0-1.noarch.rpm
+ali-slb-auto-libs-3.4.0-1.noarch.rpm
+ali-slb-auto-rsservices-3.4.0-1.noarch.rpm
+ali-slb-auto-runtime-3.4.0-1.noarch.rpm
+
+打包到yyl/slbauto_b/wq_slbauto/rpm目录里
+
+--------------测试环境  10.101.170.2-----------------------------
+
+# 用admin从10.101.169.68:/home/admin/XXX远程 拷贝到当前目录
+scp -P 22 admin@10.101.169.68:/home/admin/ali-slb-api-3.5.1-486951.noarch.rpm .
+
+# 用admin从10.101.175.201:/home/admin/XXX远程 拷贝到当前目录
+scp -P 22 admin@10.101.175.201:/home/admin/slb-control-master-3.4.0-273287.noarch.rpm .
+scp -P 22 admin@10.101.175.201:/home/admin/lvs-tools-aliyun-1.0.0-12.el6.x86_64.rpm .
+
+
+# 拷贝测试机公钥到VPC的ECS(10.101.184.244)，以后 ssh '10.101.184.244' 直接登录
+ssh-copy-id -i ~/.ssh/id_rsa.pub 10.101.184.244
+ssh root:j0HompmV94NlZCX81d0t@10.101.184.244
+
+--------------slbapi环境 10.101.169.68:81 (从测试的debug.log获取)-----------------------------------
+
+从AG机 admin 跳转到 slbapi 10.101.169.68
+ssh 10.101.169.68
+/home/admin/ali-slb-api-3.5.1-486951.noarch.rpm
+	slb-api-service 启动tomcat服务
+spring/spring-framework.xml 里面配上各种拦截器，
+CheckParamsInterceptor   校验必填的参数、
+CheckUserSignInterceptor 验证用户和验证URL加密串、
+							初始化RequestContextHolder.getContext().setAliyunIDKP(idkp);
+							初始化RequestContextHolder.getContext().setUser(user);
+RegionAwareInterceptor   初始化region拦截器（根据每次拦截到create_loadbalancer方法参数里的region信息来动态初始化region(包含master机的地址)（新region，查询缓存null，查询数据库并缓存，旧region，查询缓存））
+                            初始化RequestContextHolder.getContext().setRegion(region);
+
+1.RegionAwareInterceptor-->
+2.findTargetRegionByParamECRegionNo(invocation)-->
+3.region = regionService.queryRegionByECRegionNo(vmRegionNo, null);-->
+4.ibatis/Region.xml
+web.xml-->spring-framework.xml-->spring-datasource.xml-->jdbc.properties
+从数据库里查询 region信息里的master地址
+
+查到同区域，lb数最少的哪个region ，缓存到缓存里，并赋值给RequestContextHolder类的contxt变量，供后续方法直接从contxt中调用region信息
+
+只有拦截到create_loadbalancer方法时（如果region变动，缓存里面没有，才会继续3以后的步骤）
+
+）
+
+
+
+--------------master环境 10.101.175.201:8088（从slbapi数据库里查询） ------------------------------------------------------------
+
+从AG机 admin 跳转到 master 10.101.175.201
+ssh 10.101.175.201
+
+/home/admin/slb-control-master-3.4.0-273287.noarch.rpm
+/home/admin/lvs-tools-aliyun-1.0.0-12.el6.x86_64.rpm
+
+	slb-control-master调用xuanyuanctl，执行lib/all-0.3.jar/com.aliyun.xuanyuan.Server里的main方法启动工程
+	运行参数-Dserver.host=10.101.175.44 -Dserver.port=11422 -Drest.port=8088 -Drest.address=10.101.175.44 -Dredis.host=10.101.175.202 -Detc.home=/conf
+
+
+agent   表里有所有agent状态信息
+
+service_unit 表里的proxy_pool_id = proxy.proxy_pool_id,lvs_group_id = lb_node.lvs_group_id
+proxy   表里有7层agent信息
+lb_node 表里有4层agent信息
+
+查到agent的地址，端口代码里写死12000
+------------------7层 10.101.137.37:12000---------------------------------------------------------------
+如果查到对应的多个agent，每个agent都要下发配置（使用netty服务）
+
+注册信息到master
+registerAgent() --> 发送一下到 10.101.175.201:11422
+data = {"type": config['type'], "host": host, "port": config['port'], "description": "***"}
+response = syncSend((config['monitor_host'], config['monitor_port']), config['register_event'], 1, buf)
+-->agent_client.py
+
+agent/slb-control-proxy.sh --> agent_main.py -->agent_server.py -->readConfig()
+启动服务 10.101.137.37:12000 (接受master下发的配置信息)
+
+
+
+
+
+
+agent.yaml里有一下信息
+----------------------------
+$cat agent.yaml
+host: 10.101.137.50
+port: 12000
+monitor_host:
+- 10.101.175.201
+monitor_port: 11422
+local_if: dummy0
+master_host:
+- 10.101.175.44
+- 10.101.175.43
+- 10.101.175.201
+
+----------------------------
+
+
+
+------------------4层 10.101.137.50:12000（10.101.137.49）---------------------------------------------
+如果查到对应的多个agent，每个agent都要下发配置（使用netty服务）
+agent/slb-control-lvs.sh --> agent_main.py -->agent_server.py -->readConfig()
+
+--------------------ECS--------------------------------------
+
+# centOS系统 httpd服务 命令
+systemctl start httpd.service
+systemctl stop httpd.service
+
+
+# ali系统 httpd服务 命令
+service httpd start
+service httpd stop
+
+
+$slb
+1) SLB_SERVERS		     4) SLB_SQA_10gtest_c	  7) SLB_TBC_ALY2_SPARROW
+2) SLB_SQA_10gtest_a	 5) SLB_SQA_10gtest_d	  8) SLB_TBC_RDS2
+3) SLB_SQA_10gtest_b	 6) SLB_SQA_10gtest_f	  9) SLB_ZMF_PRECLOUD
+=====================================================================================
+#? 3
+1) slb_sqa_10gtest_b_api	5) slb_sqa_10gtest_b_lvs
+2) slb_sqa_10gtest_b_api_db	6) slb_sqa_10gtest_b_proxy
+3) slb_sqa_10gtest_b_master	7) slb_sqa_10gtest_b_keyserver
+4) slb_sqa_10gtest_b_master_db
+#? 1
+1) 10.101.169.68
+#? ctrl+D
+#? 2
+mysql -hslb10gtestapi.mysql.rdstest.tbsite.net -P3306 -uslbapi -p7G9D3BApuLYLM slbapi
+#? ctrl+D
+#? 3
+1) 10.101.175.40
+#? ctrl+D
+#? 5
+1) 10.101.137.51
+2) 10.101.137.52
+#? ctrl+D
+#? 6
+1) 100.82.42.32
+2) 100.82.42.27
+#? ctrl+D
+#? 7
+1) 10.101.175.40
+==================================================================================
+
+
+
+slbapi分析：
+slbapi使用tomcat容器，struts+spring+ibatis，MySQL数据库。
+slbapi是master里的接口再次封装,负责把前台请求的方法处理后跳转给对应region下的master系统。
+slbapi和master 是一对多的关系。
+
+-----------slb 调 master 分析-----------------------------------------------------------------------
+例：
+1.前台用户创建LB实例-->填好参数-->提交，http请求，根据IP，port，提交给后台slbapi应用
+struts.xml
+	1.1代理总action，处理参数里的action=query_loadbalancer_info
+	com.aliyun.slb.api.action.ProxyAction
+
+	备注：前台所有的请求都为同一个方法，只是参数不同（例http://10.x.x.x:8080/api?action=xxx&region=xxx&.....）
+          后台控制层处理参数里的action=xxx，找到真正的方法后在转交给对应的action去处理
+	1.2配置拦截器，拦截器的实例bean在spring/spring-framework.xml里实例化
+
+com.aliyun.slb.api.interceptor.CheckParamsInterceptor   校验参数
+com.aliyun.slb.api.interceptor.CheckUserSignInterceptor 验证用户信息和URL加密串
+com.aliyun.slb.api.interceptor.RegionAwareInterceptor   查找 数据库region_info表里的region，根据lb_id初始化region。查询的时候如果lb_info表里lb_id不存在 直接返回结束，不进action
+	拦截器：校验必填参数-->拦截器：验证用户信息和URL加密串-->拦截器：初始化region（根据参数里的region名找到真正的master服务器地址）
+    region拦截器工作原理
+        前提：slbapi数据库region表已录入真实的master服务器地址群
+        拦截器拦截请求的方法，解析参数，
+            a:参数里包含‘创建LB’ 方法，在根据参数里的region，读缓存，找出master地址，缓存里没有则查数据库，并且缓存，初始化region
+            b:参数里不包含‘创建LB’方法，读缓存找出master地址，没有则读数据库
+2.通过层层拦截后，进入后台xxAction控制层里的method方法，(struts配置文件里的映射关系)
+  方法里处理参数，找到真正的action去处理，例如 CreateLBAction
+3.CreateLBAction,再次封装http请求交给region对应的master服务器应用去处理
+4. 进入master系统，处理请求，返回结果给slbapi系统
+5. slbapi系统返回结果给前台系统
+
+spring-framework.xml
+
+	1. 实例化和管理 action层，拦截器等bean的初始化
+
+	2.引入
+		spring-datasource.xml 数据库初始化
+		spring-dao.xml        dao层注入
+		spring-service.xml    服务层注入
+		slbapi-dubbo.xml      VPC的ECS地址等
+
+-------------slb 调 ECS 分析---------------------------------------------------------------------------
+
+slbapi.properties
+#ec.api.url=http://10.101.169.68:9080/open/services?
+#ec.api.url=http://10.101.173.57/open/services?
+#ec.api.url=http://10.230.204.65/open/services?
+ec.api.url=http://localhost:9080/open/services?
+
+spring-framework.xml
+<bean id="houyiPropertyConfigurer" class="org.springframework.beans.factory.config.PropertyPlaceholderConfigurer">
+	<property name="locations">
+		<list>
+			<!--<value>file:/home/slb/slbapi/conf/jdbc.properties</value>
+			<value>file:/home/slb/slbapi/conf/slbapi.properties</value>-->
+			<value>classpath:jdbc.properties</value>
+			<value>classpath:slbapi.properties</value>
+		</list>
+	</property>
+</bean>
+
+
+spring-service.xml
+<bean id="rsService" class="com.aliyun.slb.api.service.impl.RsServiceImpl">
+	<property name="rsDao" ref="rsDao" />
+	<property name="ecApiUrl" value="${ec.api.url}" />
+</bean>
+
+com.aliyun.slb.api.action.biz.AddVmAction
+	@Override
+    public ResultDomain execute() {
+        Result<Object> result = loadBalancerService.addVm();
+        ...
+        return resultDomain;
+    }
+
+com.aliyun.slb.api.action.biz.AddRsAction
+	@Override
+    public ResultDomain execute() {
+        Result<Object> result = loadBalancerService.addRs();
+        ...
+        return resultDomain;
+    }
+
+com.aliyun.slb.api.service.impl.LoadBalancerServiceImpl
+	@Override
+    public Result<Object> addRs(){
+		Result<Object> transformResult = name2ip("rs_list");
+		if (!transformResult.isSuccessful()) {
+            return transformResult;
+        }
+	}
+
+	@Override
+    public Result<Object> addVm(){
+		Result<Object> transformResult = name2ip("vm_list");
+        if (!transformResult.isSuccessful()) {
+            return transformResult;
+        }
+	}
+
+com.aliyun.slb.api.service.AbstractService
+	private Result<Object> queryVmInfoByName(String vmName){
+		VmInfo vmInfo = rsService.queryVmInfoByName(vmName);
+        if (vmInfo == null) {
+            Result<Object> result = new Result<Object>();
+            result.setMsg("-2061 query vm fail");
+            return result;
+        }
+	}
+
+	protected Result<Object> name2ip(String key){
+		Result<Object> result = queryVmInfoByName(vmName);
+		if (!result.isSuccessful()) {
+			return result;
+		}
+	}
+
+com.aliyun.slb.api.service.impl.RsServiceImpl
+	public VmInfo queryVmInfoByName(String vmName){
+		Map<String, Object> respMap = HttpUtil.sendRequest(buildURL(params), HttpMethod.GET.toString());
+	}
+
+	private String buildURL(Map<String, Object> params){
+		#spring-service.xml里配置ecApiUrl
+		#构建 ECS的URL 和参数
+		return URLUtils.assemble(ecApiUrl, params);
+	}
+
+------slbapi 机器上 /home/slb/houyiapi -----
+[admin@slbt06s4.et2sqa /home/slb/houyiapi]
+$ll
+total 6788
+-rw-rw-r-- 1 admin admin    6832 Jun 16 12:20 DetailVMProxy.py
+-rw------- 1 admin admin 6932874 Aug 19 03:06 nohup.out
+-rwxr-xr-x 1 admin admin      32 Jun 16 12:20 start_houyi_mock_services.sh
+
+DetailVMProxy.py
+启动 HTTPServer http://10.101.173.57/open/services 验证ECS
+
+
+
+-------------------------------------------------------------------------------------------------------
+客户 控制流 open api-->slb api-->slb master-->slb agent
+
+1.
+ 客户通过 master  创建LB 实例 获得分配的LB IP (此时还不能ping通LB的IP)
+ 客户通过 master  给LB关联多台ECS
+ 客户通过 master  创建VIP
+2. master 异步下发VIP信息到 LVS的控制层agent（到4层下发到 LVS；7层下发到LVS-->proxy）
+3.控制层agent 修改转发层配置文件（4层  nginx,7层 tengine ）
+4.转发层 通过OSPF协议对外广播SLB实例的vip，（此时就能ping通LB的IP）
+
+用户 访问流
+浏览器 访问虚拟IP地址-->到LVS-->负载均衡到ECS
+
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+
+master分析：jetty容器（main方法启动工程）、spring+jdbc、MySQL和redis缓存数据库
+
+main() 方法
+1.启动加载spring-framework.xml配置文件
+    bean id="env"               初始化数据库信息
+
+    ------------和agent交互------------------------------
+    bean id="endPoint"          11422 端口，使用netty 作为服务端启动TCP服务,供agent上报注册信息和心跳使用
+    bean id="handlerDispatcher" 服务端接受消息处理
+
+    bean id="rpcPoint"          12000 端口，master作为客户端下发修改VIP的配置文件的TCP请求到 agent（agentIP:12000） （agent也会启动一个ＴＣＰ服务端服务）
+    -----------------------------------------------------
+    bean id="redisServiceHelper"
+    bean id="redisCacheService" 初始化redis缓存
+
+2.使用jetty启动 http 服务，8088 端口，供slb-api调用接口
+
+
+
+
+------------------------------------master 代码分析 ----------------------------------------------------------------------
+
+
+com.aliyun.xuanyuan.plugins.slb.rest.RestVip#createVip
+	response = vipService.create(lbGlobalId, listenerList, userId);
+	com.aliyun.xuanyuan.plugins.slb.service.impl.VipServiceImpl#createVip
+		boolean ret = activeVip(activeVipList, lb, userId);
+			addProxyServiceTask.process(activeHttpVipList, lb)
+				com.aliyun.xuanyuan.plugins.slb.task.impl.ProxyServiceTaskImpl#process
+					return sendMessage(proxyMap, vipList);
+						ret = commonMessageService.sendProxyParallelly(proxyMap,getEvent());
+							com.aliyun.xuanyuan.plugins.slb.service.message.impl.CommonMessageServiceImpl#sendParallelly
+								com.aliyun.xuanyuan.plugins.slb.service.message.impl.CommonMessageServiceImpl#sendMessage
+									rpcPoint.asynCall(address, port, event, 1, ...
+										com.aliyun.xuanyuan.common.Sender#call
+
+			addLvsServiceTask.process(activeTcpVipList, lb)
+				com.aliyun.xuanyuan.plugins.slb.task.impl.LvsServiceTaskImpl#process(java.util.List<com.aliyun.xuanyuan.plugins.slb.entity.VipDo>, com.aliyun.xuanyuan.plugins.slb.entity.LbDo)
+					return sendMessage(lbNodesMap, vipDoList);
+						ret = commonMessageService.sendLbNodeParallelly(lbNodesMap, getEvent());
+							com.aliyun.xuanyuan.plugins.slb.service.message.impl.CommonMessageServiceImpl#sendLbNodeParallelly
+								com.aliyun.xuanyuan.plugins.slb.service.message.impl.CommonMessageServiceImpl#sendParallelly
+									sendMessage(event, obj, address, agentType, countDL, successCountDL);
+										rpcPoint.asynCall(address, port, event, 1, ...
+											com.aliyun.xuanyuan.common.Sender#asynCall(java.lang.String, int, int, int, java.lang.String, com.aliyun.xuanyuan.api.ResponseHook)
+												com.aliyun.xuanyuan.common.Sender#call
+
+
+
+
+
+
+
+
+-----------创建VIP-----------------------------------------
+控制层
+创建VIP
+com.aliyun.xuanyuan.plugins.slb.rest.RestVip#createVip
+	解析参数，vip配置信息解析成Listener实例
+	调服务层（lb_global_id,List<Listener>,userId）
+
+服务层
+com.aliyun.xuanyuan.plugins.slb.service.impl.VipServiceImpl#create
+	根据lb_global_id查询lb实例
+	调用createVip(lb实例, List<Listener>, userId)
+com.aliyun.xuanyuan.plugins.slb.service.impl.VipServiceImpl#createVip
+	try{
+		//根据lb.id查询ip表，获得虚ip和一些信息
+		List<IpDo> ipDoList = ipDao.getByLbId(lb.getLbId());
+		//判断监听是否已存在（用监听的端口区分）
+		List<Integer> currentPortList = vipDao.getAllPortByLbId(lb.getLbId());
+		rsPool存在查出rsPool,不存在，根据lb.id,端口,协议新建一个rsPool,把vm都rsPool
+		--可能的情况分析（创建lb后，1.先关联ECS后（会创建rsPool），在创建监听，rsPool会存在；2先创建监听（rsPool此时存在，），后关联ECS，）
+		实例化空白监听，开始set信息
+		如果是https协议，set证书和证书ID
+		如果是tcp set tcp_config ,config里异步标记可用
+		如果是udp set tcp_config ,config里异步标记不可用
+		如果是http/https set http_config ,config里配上proxy_pool_port端口，和4层的setTcpWildConfig
+		保存VIP信息到数据库
+	}catch(){
+		回滚
+	}
+	VIP信息添加到CacheService（Redis缓存）
+
+	下发配置
+	boolean ret = activeVip(被保存的VIP实例列表, lb实例, userId);
+
+com.aliyun.xuanyuan.plugins.slb.service.impl.VipServiceImpl#activeVip
+	//设置VIP状态为活动，4层activeTcpVipList赋List<vip>，7层activeHttpVipList赋List<vip>
+	commonService.CheckVipList
+	7层负载activeHttpVipList有值，7层addProxyServiceTask.process(activeHttpVipList, lb)下发失败的话，如果4层activeTcpVipList有值在下发4层addLvsServiceTask.process(activeTcpVipList, lb)
+	4层负载activeTcpVipList有值，4层下发addLvsServiceTask.process(activeTcpVipList, lb);
+
+//此类对应agent里的事件处理方法proxy.yaml，lvs.yaml
+com.aliyun.xuanyuan.plugins.slb.common.Event
+
+7层下发
+com.aliyun.xuanyuan.plugins.slb.task.impl.ProxyServiceTaskImpl#process(List<VipDo>, LbDo)
+	//查询7层机器集合,和封装下发数据
+	Map<String, Proxy> proxyMap = proxyMessageService.buildMessageFromVipAndLb(vipList, lbDo);
+		//封装下发的信息到proxyMap{address：proxy}
+		replicatToSb(ipDo, dispatcherTemplate, proxyMap);
+	下发
+	sendMessage(proxyMap, vipList)
+		ret = commonMessageService.sendProxyParallelly(proxyMap,getEvent())//getEvent() AddProxyServiceTaskImpl 对应agent的事件22000
+			com.aliyun.xuanyuan.plugins.slb.service.message.impl.CommonMessageServiceImpl#sendParallelly
+				com.aliyun.xuanyuan.plugins.slb.service.message.impl.CommonMessageServiceImpl#sendMessage
+					rpcPoint.asynCall(address, port,...,data)
+						//构建 下发信息
+						com.aliyun.xuanyuan.common.Sender#buildMessage
+						//Bootstrap 发送
+						com.aliyun.xuanyuan.common.Sender#call
+		ret = false下发失败，更新VIP状态为活动错误
+
+4层下发
+com.aliyun.xuanyuan.plugins.slb.task.impl.LvsServiceTaskImpl#process(List<VipDo>, LbDo)
+	//查询4层机器集合,和封装下发数据
+	Map<String, List<ServiceUnit>> lbNodesMap = lvsMessageService.buildMessageFromVipAndLb(vipDoList, lbDo);
+		//封装下发的信息到proxyMap{ipAddr：List<ServiceUnit>}
+		mapMessageToLvs(lbNode, serviceUnitDo, ipList, lbNodesMap)
+	下发
+	sendMessage(lbNodesMap, vipList)
+		ret = commonMessageService.sendLbNodeParallelly(lbNodesMap, getEvent());
+			com.aliyun.xuanyuan.plugins.slb.service.message.impl.CommonMessageServiceImpl#sendParallelly
+				com.aliyun.xuanyuan.plugins.slb.service.message.impl.CommonMessageServiceImpl#sendMessage
+					rpcPoint.asynCall(address, port,...,data)
+						//构建 下发信息
+						com.aliyun.xuanyuan.common.Sender#buildMessage
+						//Bootstrap 发送
+						com.aliyun.xuanyuan.common.Sender#call
+		ret = false 下发失败，更新VIP状态为活动错误
+
+
+
+
+
+
+
+
+
+
+
+---------------------------------------------------------------------------------------------------------------------------------
+
+
+
+
+
+主程序入口
+src/agent_main.py
+	from lib.agent_server import config
+	#读取配置文件[agent.yaml,lvs.yaml|proxy.yaml]
+		src/lib/config.py
+		#7层 读取agent.yaml,proxy.yaml初始化event，每个event对应master下发过来处理事件和对应方法
+		/home/slb/control-proxy/conf/proxy.yaml
+		#4层 读取agent.yaml， lvs.yaml初始化event，每个event对应master下发过来处理事件和对应方法
+		/home/slb/control-lvs/conf/lvs.yaml
+
+	#启动StreamServer服务 LVS --config 读取agent.yaml 和 lvs.yaml，proxy读取agent.yaml 和 proxy.yaml
+	server = xuanyuanServer((config['host'], PORT), SrvTCPHandler, spawn=pool.Pool())
+	# 服务接受请求处理事件
+	SrvTCPHandler
+
+src/lib/agent_server.py
+	...
+	#            处理方法   ，        ，          ，数据
+	def dispense(h_event, sequence, request_id, buf):
+		找到对应的event方法，导入 lvs_handler.py或者proxy_handler.py
+		实例化导入的Python，实例化方法，传入参数执行方法
+		返回执行的结果
+
+	...
+	#定义 SrvTCPHandler 接受master的请求处理事件的方法
+	def SrvTCPHandler(socket, addr):
+        ...
+		# 根据event值找到对应的处理方法
+		result = dispense(event, sequence, request_id, content)
+
+
+创建 VIP master下发 event 22000，查询proxy.yaml找到处理此事件的方法
+def add_proxy_service_entry(message, request_id):
+
+--------------------------- LVS  -------------------------
+创建VIP event:21000
+add_lvs_service_entry-->add_lvs_service-->update_http_rs_section_template & write_vip_conf --> try_hotconf_add_vs
+src/lib/lvs/HotConfKeepalived.py
+	try_hotconf_add_vs-->_hotconf_keepalived-->AddVS-->connect2lvs-->socket 请求 127.0.0.1:12925
+
+更新VIP event:21004
+update_lvs_service_entry-->update_lvs_service-->update_http_rs_section_template &  write_vip_conf
+
+配置VIP event:21002
+config_lvs_service_entry
+	-->config_lvs_service-->update_http_rs_section_template & write_vip_conf & try_hotconf_config_vs(HotConfKeepalived.py)
+		write_vip_conf：生成配置文件 /etc/keepalived/vip/0_10.189.106.15480#155a02f8abe-cn-hangzhou-test-306#tcp#155a02f8abe-cn-hangzhou-test-306@1673459
+	process_queue(id):/etc/keepalived/keepalived.conf.new 导入生成的配置文件
+		-->write_to_include_file() 调用lib/lvs/reconf_ospf_keepalived.sh脚本，替换keepalived.conf 文件 重启keepalived
+
+src/lib/lvs/HotConfKeepalived.py
+	try_hotconf_config_vs-->_hotconf_keepalived-->ConfigVS-->DelVS & AddVS-->connect2lvs-->socket 请求 127.0.0.1:12925
+
+----------------proxy------------------------------------
+创建VIP event:22000
+
+
+
+-------------------------------------------------------------------------------
+
+安装
+[root@localhost ~]#rpm -ivh --test slb-control-lvs-3.5.1-594226.x86_64.rpm
+Preparing...                ########################################### [100%]
+[root@localhost ~]# rpm -ivh slb-control-lvs-3.5.1-594226.x86_64.rpm
+
+cd /home/slb/control-lvs/conf/
+创建 agent.yaml  文件
+
+host: 10.32.165.16
+port: 12000
+monitor_host:
+- 10.32.164.8
+monitor_port: 11422
+local_if: dummy0
+master_host:
+- 10.32.164.8
+
+------------------------------------------------
+#环境安装必要的Python模块
+>yum install gcc python-devel
+>easy_install  gevent
+
+>cd /home/slb/control-lvs/bin
+# 启动
+>./slb-control-lvs.sh start
+
+>service slb-control-lvs status
+slb-control-lvs (pid  23818) 正在运行...
+
+
+请求slb
+http://localhost:81/slb/api?aliyun_idkp=166&format=json&timestamp=2016-06-13%2015%3A41%3A06&lb_id=15548b4c8b9-cn-hangzhou-test-306&sign=CTO2FU0Raq6eQzNdOoEgCA%3D%3D&session=houyi_test_hz%40aliyun-inc.com&action=query_loadbalancer_info&region_no=cn-hangzhou-test-306
+
+请求master
+创建 classic LB
+2016-06-16 20:33:40,961 INFO [com.aliyun.slb.api.util.http.HttpUtil] - []
+[Request URL:http://10.101.175.201:8088/lbs;lb_type=compact;eip_type=intranet;region_id=cn-hangzhou-test-306;user_id=166;bid=0;gw_type=classic,Method:POST,status:200]
+2016-06-16 20:33:40,967 INFO [com.aliyun.slb.api.action.ProxyAction] - []
+[request and response: queryString:@EOFaliyun_idkp=166&format=json&timestamp=2016-06-16%2020%3A33%3A40&sign=7uzK8XVLZpktK90jCxTQZQ%3D%3D&lb_type=compact&session=houyi_test_hz%40aliyun-inc.com&action=create_loadbalancer&eip_type=intranet&region_no=cn-hangzhou-test-306@EOF, requestParameter:@EOF{"eip_type":["intranet"],"region_no":["cn-hangzhou-test-306"],"format":["json"],"aliyun_idkp":["166"],"timestamp":["2016-06-16 20:33:40"],"sign":["7uzK8XVLZpktK90jCxTQZQ=="],"lb_type":["compact"],"session":["houyi_test_hz@aliyun-inc.com"],"action":["create_loadbalancer"]}@EOF, response:@EOF{"code":200,"data":{"eip":"10.189.105.150","lb_id":"1555933e45e-cn-hangzhou-test-306","site_id":"t1"},"msg":"successful"}@EOF]
+
+创建 VIP
+2016-06-16 20:33:41,085 INFO [com.aliyun.slb.api.util.http.HttpUtil] - []
+[Request URL:http://10.101.175.201:8088/lbs/1555933e45e-cn-hangzhou-test-306/vips;listeners=%5B%7B%22protocol%22%3A%22tcp%22%2C%22frontend_port%22%3A80%2C%22backend_port%22%3A8080%2C%22status%22%3A%22active%22%2C%22access_control%22%3A%22open_white_list%22%2C%22source_list%22%3A%2210.32.164.1%2C10.32.164.2%22%2C%22config%22%3A%7B%22check%22%3A%7B%22type%22%3A%22tcp%22%7D%7D%7D%5D;lb_id=1555933e45e-cn-hangzhou-test-306;region_id=cn-hangzhou-test-306;user_id=166,Method:POST,status:200]
+2016-06-16 20:33:41,085 INFO [com.aliyun.slb.api.action.ProxyAction] - []
+[request and response: queryString:@EOFaliyun_idkp=166&format=json&timestamp=2016-06-16%2020%3A33%3A40&lb_id=1555933e45e-cn-hangzhou-test-306&sign=CbEmTQ2%2BApmeucr1Pek9yw%3D%3D&listeners=%5B%7B%22protocol%22%3A%22tcp%22%2C%22frontend_port%22%3A80%2C%22backend_port%22%3A8080%2C%22status%22%3A%22active%22%2C%22access_control%22%3A%22open_white_list%22%2C%22source_list%22%3A%2210.32.164.1%2C10.32.164.2%22%2C%22config%22%3A%7B%22check%22%3A%7B%22type%22%3A%22tcp%22%7D%7D%7D%5D&session=houyi_test_hz%40aliyun-inc.com&action=create_vip&region_no=cn-hangzhou-test-306@EOF, requestParameter:@EOF{"timestamp":["2016-06-16 20:33:40"],"sign":["CbEmTQ2+Apmeucr1Pek9yw=="],"listeners":[[{"protocol":"tcp","frontend_port":80,"backend_port":8080,"status":"active","access_control":"open_white_list","source_list":"10.32.164.1,10.32.164.2","config":{"check":{"type":"tcp"}}}]],"session":["houyi_test_hz@aliyun-inc.com"],"lb_id":["1555933e45e-cn-hangzhou-test-306"],"action":["create_vip"],"region_no":["cn-hangzhou-test-306"],"format":["json"],"aliyun_idkp":["166"]}@EOF, response:@EOF{"code":200,"data":[{"listener_id":"1555933e45e-cn-hangzhou-test-306@1673058","protocol":"tcp","port":80}],"msg":"successful"}@EOF]
+
+修改 VIP
+2016-06-16 20:33:44,187 INFO [com.aliyun.slb.api.util.http.HttpUtil] - []
+[Request URL:http://10.101.175.201:8088/lbs/1555933e45e-cn-hangzhou-test-306/vips;region_id=cn-hangzhou-test-306;frontend_port=80;lb_id=1555933e45e-cn-hangzhou-test-306;access_control=open_white_list;config=%7B%22sticky_session%22%3A%7B%7D%2C%22check%22%3A%7B%22type%22%3A%22tcp%22%7D%7D;user_id=166;source_list=10.32.164.6%2C10.32.164.5,Method:PUT,status:200]
+2016-06-16 20:33:44,187 INFO [com.aliyun.slb.api.action.ProxyAction] - []
+[request and response: queryString:@EOFaliyun_idkp=166&region_no=cn-hangzhou-test-306&source_list=10.32.164.6%2C10.32.164.5&access_control=open_white_list&format=json&timestamp=2016-06-16%2020%3A33%3A44&lb_id=1555933e45e-cn-hangzhou-test-306&sign=eGDm6dFMc%2FLLlEFtGHX7zw%3D%3D&session=houyi_test_hz%40aliyun-inc.com&action=config_vip&frontend_port=80&config=%7B%22sticky_session%22%3A%7B%7D%2C%22check%22%3A%7B%22type%22%3A%22tcp%22%7D%7D@EOF, requestParameter:@EOF{"timestamp":["2016-06-16 20:33:44"],"sign":["eGDm6dFMc/LLlEFtGHX7zw=="],"frontend_port":["80"],"session":["houyi_test_hz@aliyun-inc.com"],"lb_id":["1555933e45e-cn-hangzhou-test-306"],"action":["config_vip"],"region_no":["cn-hangzhou-test-306"],"access_control":["open_white_list"],"config":[{"sticky_session":{},"check":{"type":"tcp"}}],"source_list":["10.32.164.6,10.32.164.5"],"format":["json"],"aliyun_idkp":["166"]}@EOF, response:@EOF{"code":200,"data":null,"msg":"successful"}@EOF]
+
+添加 ECS
+2016-06-16 20:33:47,301 INFO [com.aliyun.slb.api.util.http.HttpUtil] - []
+[Request URL:http://10.101.175.201:8088/lbs/1555933e45e-cn-hangzhou-test-306/vms;vm_list=%5B%7B%22weight%22%3A%22100%22%2C%22address%22%3A%2210.189.94.207%22%7D%2C%7B%22weight%22%3A%22100%22%2C%22address%22%3A%2210.189.93.138%22%7D%5D;lb_id=1555933e45e-cn-hangzhou-test-306;region_id=cn-hangzhou-test-306;user_id=166,Method:POST,status:200]
+2016-06-16 20:33:47,303 INFO [com.aliyun.slb.api.action.ProxyAction] - []
+[request and response: queryString:@EOFaliyun_idkp=166&format=json&timestamp=2016-06-16%2020%3A33%3A47&lb_id=1555933e45e-cn-hangzhou-test-306&sign=8qGNtu74xnxXrwuvCAcpew%3D%3D&session=houyi_test_hz%40aliyun-inc.com&action=add_lb_rs&region_no=cn-hangzhou-test-306&rs_list=%5B%7B%22rs_ip%22%3A%2210.189.94.207%22%2C%22weight%22%3A%22100%22%7D%2C%7B%22rs_ip%22%3A%2210.189.93.138%22%2C%22weight%22%3A%22100%22%7D%5D@EOF, requestParameter:@EOF{"timestamp":["2016-06-16 20:33:47"],"sign":["8qGNtu74xnxXrwuvCAcpew=="],"rs_list":[[{"weight":"100","address":"10.189.94.207"},{"weight":"100","address":"10.189.93.138"}]],"session":["houyi_test_hz@aliyun-inc.com"],"lb_id":["1555933e45e-cn-hangzhou-test-306"],"action":["add_lb_rs"],"region_no":["cn-hangzhou-test-306"],"format":["json"],"aliyun_idkp":["166"]}@EOF, response:@EOF{"code":200,"data":{"lb_id":"1555933e45e-cn-hangzhou-test-306","rs_list":[{"weight":100,"is_backup":0,"siteId":0,"rs_ip":"10.189.94.207"},{"weight":100,"is_backup":0,"siteId":0,"rs_ip":"10.189.93.138"}]},"msg":"successful"}@EOF]
+
+查询 LB
+2016-06-16 20:33:50,313 INFO [com.aliyun.slb.api.service.impl.LoadBalancerServiceImpl] - []
+[request slb backend,url=http://10.101.175.201:8088/lbs/1555933e45e-cn-hangzhou-test-306;lb_id=1555933e45e-cn-hangzhou-test-306;region_id=cn-hangzhou-test-306;user_id=166]
+2016-06-16 20:33:50,323 INFO [com.aliyun.slb.api.util.http.HttpUtil] - []
+[Request URL:http://10.101.175.201:8088/lbs/1555933e45e-cn-hangzhou-test-306;lb_id=1555933e45e-cn-hangzhou-test-306;region_id=cn-hangzhou-test-306;user_id=166,Method:GET,status:200]
+2016-06-16 20:33:50,333 INFO [com.aliyun.slb.api.action.ProxyAction] - []
+[request and response: queryString:@EOFaliyun_idkp=166&format=json&timestamp=2016-06-16%2020%3A33%3A50&lb_id=1555933e45e-cn-hangzhou-test-306&sign=zfc%2BcCsMFQOPhKNfMonn8Q%3D%3D&session=houyi_test_hz%40aliyun-inc.com&action=query_loadbalancer_info&region_no=cn-hangzhou-test-306@EOF, requestParameter:@EOF{"timestamp":["2016-06-16 20:33:50"],"sign":["zfc+cCsMFQOPhKNfMonn8Q=="],"session":["houyi_test_hz@aliyun-inc.com"],"lb_id":["1555933e45e-cn-hangzhou-test-306"],"action":["query_loadbalancer_info"],"region_no":["cn-hangzhou-test-306"],"format":["json"],"aliyun_idkp":["166"]}@EOF, response:@EOF{"code":200,"data":{"vm_list":[{"weight":100,"is_backup":0,"siteId":0,"rs_ip":"10.189.94.207"},{"weight":100,"is_backup":0,"siteId":0,"rs_ip":"10.189.93.138"}],"eip_list":[{"address":"10.189.105.150"}],"su_name":"suA","gw_type":"classic","lb_id":"1555933e45e-cn-hangzhou-test-306","eip":"10.189.105.150","mode":"fnat","lb_wildconf":{"vip_max_conn_limit":"250000000","vip_cps":"100000"},"eip_type":"intranet","lb_type":"compact","app_id":"N/A","frontend_port":[80],"ha_type":"single_site","site_id":"t1","backup_site_id":"","nc_list":[],"rs_list":[{"weight":100,"is_backup":0,"siteId":0,"rs_ip":"10.189.94.207"},{"weight":100,"is_backup":0,"siteId":0,"rs_ip":"10.189.93.138"}]},"msg":"successful"}@EOF]
+
+查询 VIP
+2016-06-16 20:33:50,346 INFO [com.aliyun.slb.api.util.http.HttpUtil] - []
+[Request URL:http://10.101.175.201:8088/lbs/1555933e45e-cn-hangzhou-test-306/vips;frontend_port=80;lb_id=1555933e45e-cn-hangzhou-test-306;region_id=cn-hangzhou-test-306;user_id=166,Method:GET,status:200]
+2016-06-16 20:33:50,347 INFO [com.aliyun.slb.api.action.ProxyAction] - []
+[request and response: queryString:@EOFaliyun_idkp=166&region_no=cn-hangzhou-test-306&format=json&timestamp=2016-06-16%2020%3A33%3A50&lb_id=1555933e45e-cn-hangzhou-test-306&sign=0IbqP7%2FylKLPC2BrA2Qi2A%3D%3D&session=houyi_test_hz%40aliyun-inc.com&action=query_vip_info&frontend_port=80@EOF, requestParameter:@EOF{"timestamp":["2016-06-16 20:33:50"],"sign":["0IbqP7/ylKLPC2BrA2Qi2A=="],"frontend_port":["80"],"session":["houyi_test_hz@aliyun-inc.com"],"lb_id":["1555933e45e-cn-hangzhou-test-306"],"action":["query_vip_info"],"region_no":["cn-hangzhou-test-306"],"format":["json"],"aliyun_idkp":["166"]}@EOF, response:@EOF{"code":200,"data":{"config":{"max_conn_limit":"5000000","vip_max_conn_limit":"250000000","persistence_timeout":0,"check":{"interval":2,"down":3,"type":"tcp","timeout":2,"up":3},"scheduler":"wrr","syn_proxy":"ENABLE","fingerprint_num":0},"status":"running","backend_port":8080,"frontend_port":80,"access_control":"open_white_list","source_list":"10.32.164.6/32,10.32.164.5/32","listener_id":"1555933e45e-cn-hangzhou-test-306@1673058","protocol":"tcp"},"msg":"successful"}@EOF]
+
+删除 VIP
+2016-06-16 20:29:15,192 INFO [com.aliyun.slb.api.util.http.HttpUtil] - []
+[Request URL:http://10.101.175.201:8088/lbs/15559225a31-cn-hangzhou-test-306/vips;lb_id=15559225a31-cn-hangzhou-test-306;region_id=cn-hangzhou-test-306;user_id=166;frontend_port_list=%5B80%5D,Method:DELETE,status:200]
+2016-06-16 20:29:15,193 INFO [com.aliyun.slb.api.action.ProxyAction] - []
+[request and response: queryString:@EOFaliyun_idkp=166&format=json&timestamp=2016-06-16%2020%3A29%3A09&lb_id=15559225a31-cn-hangzhou-test-306&sign=MpkgXrj6%2FTSmCt%2FDASNt2w%3D%3D&session=houyi_test_hz%40aliyun-inc.com&frontend_port_list=%5B80%5D&action=delete_vip&region_no=cn-hangzhou-test-306@EOF, requestParameter:@EOF{"timestamp":["2016-06-16 20:29:09"],"sign":["MpkgXrj6/TSmCt/DASNt2w=="],"session":["houyi_test_hz@aliyun-inc.com"],"lb_id":["15559225a31-cn-hangzhou-test-306"],"action":["delete_vip"],"region_no":["cn-hangzhou-test-306"],"format":["json"],"frontend_port_list":[[80]],"aliyun_idkp":["166"]}@EOF, response:@EOF{"code":200,"data":null,"msg":"successful"}@EOF]
+
+删除 LB
+2016-06-16 20:29:15,276 INFO [com.aliyun.slb.api.util.http.HttpUtil] - []
+[Request URL:http://10.101.175.201:8088/lbs/15559225a31-cn-hangzhou-test-306;lb_id=15559225a31-cn-hangzhou-test-306;user_id=166,Method:DELETE,status:200]
+2016-06-16 20:29:15,285 INFO [com.aliyun.slb.api.action.ProxyAction] - []
+[request and response: queryString:@EOFaliyun_idkp=166&format=json&timestamp=2016-06-16%2020%3A29%3A15&lb_id=15559225a31-cn-hangzhou-test-306&sign=rtJdxNuQ818E5xORO9R97w%3D%3D&session=houyi_test_hz%40aliyun-inc.com&action=delete_loadbalancer@EOF, requestParameter:@EOF{"timestamp":["2016-06-16 20:29:15"],"sign":["rtJdxNuQ818E5xORO9R97w=="],"session":["houyi_test_hz@aliyun-inc.com"],"lb_id":["15559225a31-cn-hangzhou-test-306"],"action":["delete_loadbalancer"],"format":["json"],"aliyun_idkp":["166"]}@EOF, response:@EOF{"code":200,"data":null,"msg":"successful"}@EOF]
+
+
+maintenance 环境搭建
+
+#查看JDK信息：
+>rpm -qa|grep java
+tzdata-java-2014g-1.el6.noarch
+java-1.6.0-openjdk-1.6.0.0-11.1.13.4.el6.x86_64
+java-1.7.0-openjdk-1.7.0.65-2.5.1.2.el6_5.x86_64
+#卸载OpenJDK，执行以下操作：
+>rpm -e --nodeps tzdata-java-2014g-1.el6.noarch
+>rpm -e --nodeps java-1.6.0-openjdk-1.6.0.0-11.1.13.4.el6.x86_64
+>rpm -e --nodeps java-1.7.0-openjdk-1.7.0.65-2.5.1.2.el6_5.x86_64
+
+
+
+# 安装jdk  默认到 cd /opt/taobao/install/jdk-1.7.0_65/
+>rpm -ivh ali-jdk-1.7.0_65-49.el6.x86_64.rpm
+
+#解压.tar.gz文件：tar不支持解压文件到指定的目录！
+>tar -zxvf apache-maven-3.3.9-bin.tar.gz
+#解压.war .zip文件到指定目录：
+#unzip web.war -d webapps/ROOT/
+#替换或者配置apache-maven-3.3.9/conf/settings.xml文件
+
+
+
+
+# 编辑前查看环境变量
+>echo $PATH
+/usr/local/bin:/bin:/usr/bin:/usr/local/sbin:/usr/sbin:/sbin:/home/yyl/bin
+
+# 编辑环境变量
+>vi /etc/profile
+
+# 追加如下三行
+JAVA_HOME=/opt/taobao/install/jdk-1.7.0_65
+MAVEN_HOME=/opt/apache-maven-3.3.9
+PATH=$PATH:$JAVA_HOME/bin:$MAVEN_HOME/bin
+export JAVA_HOME JRE_HOME PATH
+
+
+
+#使修改立即生效
+>source /etc/profile
+
+# 查看环境变量
+>echo $PATH
+/usr/local/bin:/bin:/usr/bin:/usr/local/sbin:/usr/sbin:/sbin:/home/yyl/bin:/opt/taobao/install/jdk-1.7.0_65//bin:/opt/taobao/install/jdk-1.7.0_65/bin
+
+#验证是否安装成功，输入如下命令
+>java -version
+# 打包编译项目依赖maven
+>mvn -v
+
+
+# 安装开源的rpm-build
+>yum install rpm-build
+
+
+# 检查依赖
+>rpm -ivh --test dep_create-1.0.29-186.noarch.rpm
+
+#安装
+>rpm -ivh dep_create-1.0.29-186.noarch.rpm
+>rpm -ivh rpm_create-1.0.24-48.noarch.rpm
+>rpm -ivh t-abs-0.0.28-202.noarch.rpm
+
+
+#拷贝项目到opt
+>cd /opt/slb-maintenance/rpm/
+#开始打包，到/opt/slb-maintenance/target下面
+>t-abs slb-maintenance.spec
+
+
+
+
+
+
+
+
+
+
+
+------------------------------------------------------------------------------------------------------------
+code git path:master branch
+	http://gitlab.alibaba-inc.com/slb/slb-maintenance
+
+文档地址：
+	http://gitlab.alibaba-inc.com/yufeng.syf/doc/blob/master/slb-maintenance/SLB%E8%BF%90%E7%BB%B4API.md
+	---更新文档地址：
+	http://gitlab.alibaba-inc.com/slb/slb-control-system-wiki/blob/master/%E8%AE%BE%E8%AE%A1%E6%96%87%E6%A1%A3/%E8%BF%90%E7%BB%B4API/SLB%E8%BF%90%E7%BB%B4API.md#3-3-3-lb-global-id-lb
+
+部署相关的工具路径：
+	http://rpm.corp.taobao.com/
+
+	dep_create-1.0.29-186.noarch、rpm_create-1.0.24-48.noarch、t-abs-0.0.28-202.noarch.rpm、ali-jdk-1.7.0_65-49.el6.x86_64、rpm_build-4.8.0-27.el6.x86_64
+
+测试类：
+	http://gitlab.alibaba-inc.com/yufeng.syf/doc/tree/master/slb-maintenance/java
+
+
+
+
