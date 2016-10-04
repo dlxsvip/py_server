@@ -41,3 +41,19 @@ def __get_ip__():
     else:
         hostname = gethostname()
         return gethostbyname(hostname)
+
+
+# 获取Linux 分支版本
+def __get_linux_v_():
+    system_info = platform.linux_distribution()
+    print system_info
+
+    if 'Alibaba' in platform.linux_distribution():
+        return 'Alibaba'
+    elif 'CentOS' in platform.linux_distribution():
+        return 'CentOS'
+    elif 'Ubuntu' in platform.linux_distribution():
+        return 'ubuntu'
+    else:
+        return 'Other'
+
