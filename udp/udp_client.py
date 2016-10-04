@@ -1,6 +1,6 @@
 #!/usr/bin/python
 # -*- coding:UTF-8 -*-
-__author__ = 'wb-yyl187231'
+__author__ = 'yy'
 
 import os
 import time

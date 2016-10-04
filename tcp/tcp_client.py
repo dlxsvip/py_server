@@ -2,7 +2,7 @@
 # -*- coding:UTF-8 -*-
 import subprocess
 
-__author__ = 'wb-yyl187231'
+__author__ = 'yyl'
 
 import os
 import time
