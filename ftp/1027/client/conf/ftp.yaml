@@ -1,0 +1,17 @@
+---
+
+ip: 192.168.122.132
+port: 21
+name: testftp
+pwd: '******'
+#method: put
+remote_dir: tmp
+put_files:
+  - D:\test\test.xls
+  - D:\test\22.xls
+
+method: get
+local_dir: D:\test2\
+get_files:
+  - test.xls
+  - 22.xls
